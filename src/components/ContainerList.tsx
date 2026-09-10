@@ -3,6 +3,9 @@ import { motion } from "motion/react";
 import { Cpu, Server, Plus, Power, Trash2, Layers, HelpCircle } from "lucide-react";
 import { Container } from "../types";
 
+/** Formats the seeded/default container list resource card labels. */
+const resourceLabel = (v: string) => v;
+
 interface ContainerListProps {
   containers: Container[];
   onSelect: (id: string) => void;
@@ -183,9 +186,14 @@ export default function ContainerList({
               
               {containers.length > 1 && (
                 <button
-                  onClick={() => onDeleteContainer(c.id)}
+                  onClick={() => {
+                    if (window.confirm(`Terminate node '${c.name}'? Its files, logs and settings will be permanently deleted.`)) {
+                      onDeleteContainer(c.id);
+                    }
+                  }}
                   className="rounded-xl border border-white/5 hover:border-rose-500/20 bg-rose-950/5 hover:bg-rose-950/20 p-2.5 text-gray-500 hover:text-rose-400 transition-all cursor-pointer"
                   title="Terminate Node"
+                  aria-label={`Terminate node ${c.name}`}
                 >
                   <Trash2 size={14} />
                 </button>

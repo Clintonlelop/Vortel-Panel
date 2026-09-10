@@ -1,7 +1,15 @@
 import React, { useState, useEffect } from "react";
 import { motion } from "motion/react";
-import { Shield, Settings2, Code2, CheckCircle2, AlertCircle, RefreshCw, Terminal } from "lucide-react";
+import { Shield, CheckCircle2, AlertCircle, RefreshCw } from "lucide-react";
 import { BotFile, Container } from "../types";
+
+interface ScanResult {
+  language: string;
+  entryFile: string;
+  dependencies: string[];
+  status: "clean" | "warning" | "error";
+  message: string;
+}
 
 interface CodeScannerProps {
   container: Container;
@@ -29,11 +37,11 @@ export default function CodeScanner({
 
   // Perform automatic scan whenever container files are changed
   useEffect(() => {
-    autoScanFiles();
+    setScanResult(scanFiles(container.files));
   }, [container.files, isInstalled]);
 
-  const autoScanFiles = () => {
-    const files = container.files;
+  /** Pure static analysis of the workspace files. Returns a fresh result object. */
+  const scanFiles = (files: BotFile[]): ScanResult => {
     let language = "Vanilla Script";
     let entryFile = "index.js";
     let dependencies: string[] = [];
@@ -96,31 +104,30 @@ export default function CodeScanner({
       message = "Dependency tree contains unresolvable packages on npm.";
     }
 
-    setScanResult({
+    return {
       language,
       entryFile,
       dependencies,
       status,
       message
-    });
+    };
   };
 
   const handleManualScan = () => {
     setIsScanning(true);
     addLog("[Vortex Engine] Initiating automated source security scan...", "info");
-    
+
     setTimeout(() => {
       setIsScanning(false);
-      autoScanFiles();
-      if (scanResult) {
-        if (scanResult.status === "error") {
-          addLog(`[Vortex Engine] Scan Failed! ${scanResult.message}`, "error");
-          onSetStatus("CRASHED", scanResult.message);
-        } else if (scanResult.status === "warning") {
-          addLog(`[Vortex Engine] Warning: ${scanResult.message}`, "error");
-        } else {
-          addLog(`[Vortex Engine] Source files verified! Runtime: ${scanResult.language}. Ready for run.`, "success");
-        }
+      // Compute a FRESH result and use it (fixes stale-closure reporting)
+      const fresh = scanFiles(container.files);
+      if (fresh.status === "error") {
+        addLog(`[Vortex Engine] Scan Failed! ${fresh.message}`, "error");
+        onSetStatus("CRASHED", fresh.message);
+      } else if (fresh.status === "warning") {
+        addLog(`[Vortex Engine] Warning: ${fresh.message}`, "info");
+      } else {
+        addLog(`[Vortex Engine] Source files verified! Runtime: ${fresh.language}. Ready for run.`, "success");
       }
     }, 1500);
   };

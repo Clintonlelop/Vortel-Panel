@@ -21,6 +21,13 @@
       ]
     },
     "allowImportingTsExtensions": true,
-    "noEmit": true
-  }
+    "noEmit": true,
+    "strict": true,
+    "skipDefaultLibCheck": false
+  },
+  "exclude": [
+    "node_modules",
+    "dist",
+    "server.cjs"
+  ]
 }

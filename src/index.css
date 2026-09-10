@@ -1,1 +1,56 @@
 @import "tailwindcss";
+
+/* ---- Custom keyframes used by Vortex Panel components ---- */
+
+@keyframes vortex-shake {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-4px); }
+  40% { transform: translateX(4px); }
+  60% { transform: translateX(-3px); }
+  80% { transform: translateX(3px); }
+}
+
+@keyframes vortex-fade-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-shake {
+  animation: vortex-shake 0.4s ease-in-out;
+}
+
+.animate-fade-in {
+  animation: vortex-fade-in 0.3s ease-out;
+}
+
+/* ---- Thin scrollbar utilities (non-standard colors are cosmetic only) ---- */
+
+.scrollbar-thin {
+  scrollbar-width: thin;
+}
+
+.scrollbar-thin::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.scrollbar-thin::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.scrollbar-thin::-webkit-scrollbar-thumb {
+  background: rgba(107, 33, 168, 0.55); /* purple-950-ish */
+  border-radius: 9999px;
+}
+
+.scrollbar-thumb-purple-950::-webkit-scrollbar-thumb {
+  background: rgba(59, 7, 100, 0.6);
+}
+
+.scrollbar-thumb-purple-900::-webkit-scrollbar-thumb {
+  background: rgba(88, 28, 135, 0.6);
+}
+
+.scrollbar-track-transparent::-webkit-scrollbar-track {
+  background: transparent;
+}

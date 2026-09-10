@@ -1,5 +1,8 @@
 export interface BotFile {
   name: string;
+  // Folder path relative to /home/container ("" or undefined = root).
+  // Enables real directory navigation instead of a flat, visual-only listing.
+  path?: string;
   content: string;
   isFolder: boolean;
   size?: string;

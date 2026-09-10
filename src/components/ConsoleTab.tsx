@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useRef, useEffect, useState } from "react";
 import { motion } from "motion/react";
 import {
   Play,
@@ -11,39 +11,30 @@ import {
   Cpu,
   Database,
   Globe,
-  Sliders,
-  CheckCircle,
-  HelpCircle,
-  Sparkles
+  Sliders
 } from "lucide-react";
 import { ConsoleLog, ServerStats } from "../types";
 
 interface ConsoleTabProps {
   stats: ServerStats;
-  setStats: React.Dispatch<React.SetStateAction<ServerStats>>;
   logs: ConsoleLog[];
-  setLogs: React.Dispatch<React.SetStateAction<ConsoleLog[]>>;
   onCommand: (cmd: string) => void;
   onActionClick: (action: "START" | "STOP" | "KILL" | "RESTART" | "INSTALL") => void;
   showQrCode: boolean;
-  isHealed: boolean;
   isInstalled: boolean;
 }
 
 export default function ConsoleTab({
   stats,
-  setStats,
   logs,
-  setLogs,
   onCommand,
   onActionClick,
   showQrCode,
-  isHealed,
   isInstalled
 }: ConsoleTabProps) {
   const [showStats, setShowStats] = useState(true);
   const [commandInput, setCommandInput] = useState("");
-  const [freedomGauge, setFreedomGauge] = useState(100); // Default to maximum / unlimited
+  const freedomGauge = 100; // Unlimited pipeline (static gauge)
   const logsEndRef = useRef<HTMLDivElement>(null);
 
   // Canvas graph refs for real-time plotting
@@ -229,7 +220,7 @@ export default function ConsoleTab({
               <div className="relative h-2 rounded-full bg-black/60 overflow-hidden border border-white/5">
                 <div
                   className="absolute inset-y-0 left-0 bg-gradient-to-r from-purple-600 to-indigo-400 transition-all duration-300"
-                  style={{ width: `${freedomGauge}%` }}
+                  style={{ width: "100%" }}
                 />
               </div>
             </div>

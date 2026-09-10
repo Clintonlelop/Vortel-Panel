@@ -16,10 +16,32 @@ import {
 } from "lucide-react";
 import { BotFile } from "../types";
 
+// ---------- Folder-path helpers (files live in a flat array with a `path` field) ----------
+
+/** Storage key that uniquely identifies a file: its folder path + name. */
+const fileKey = (f: BotFile) => `${f.path || ""}/${f.name}`;
+
+/** Folder prefix for a file's location ("" for root). */
+const fileDir = (f: BotFile) => f.path || "";
+
+/** True when a file sits directly inside the given directory. */
+const inDirectory = (f: BotFile, dir: string) => fileDir(f) === dir;
+
+const TEXT_EXTENSIONS = [".js", ".ts", ".json", ".txt", ".md", ".py", ".html", ".css", ".yml", ".yaml", ".env", ".xml", ".sh", ".php", ".rb", ".go", ".env.example"];
+
+const isTextFile = (name: string, type: string) => {
+  if (type.startsWith("text/")) return true;
+  if (type === "application/json" || type === "" || type === "text/plain") return true;
+  const lower = name.toLowerCase();
+  return TEXT_EXTENSIONS.some((ext) => lower.endsWith(ext)) || lower === ".env" || lower.startsWith(".env.");
+};
+
 interface FilesTabProps {
   files: BotFile[];
-  setFiles: React.Dispatch<React.SetStateAction<BotFile[]>>;
-  onFileChange: () => void;
+  /** Scoped updater for the active container's files (function-updater style). */
+  setFiles: (updater: (files: BotFile[]) => BotFile[]) => void;
+  /** Called after any file mutation; `packageJsonChanged` invalidates installed deps. */
+  onFileChange: (packageJsonChanged?: boolean) => void;
 }
 
 export default function FilesTab({ files, setFiles, onFileChange }: FilesTabProps) {
@@ -33,6 +55,9 @@ export default function FilesTab({ files, setFiles, onFileChange }: FilesTabProp
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Current directory as a relative path ("" = root of /home/container)
+  const currentDir = currentPath.slice(2).join("/");
+
   const formatBytes = (bytes: number) => {
     if (bytes === 0) return "0 B";
     const k = 1024;
@@ -43,16 +68,26 @@ export default function FilesTab({ files, setFiles, onFileChange }: FilesTabProp
 
   const processUploadedFiles = (fileList: FileList) => {
     Array.from(fileList).forEach((file) => {
+      if (!isTextFile(file.name, file.type)) {
+        alert(`'${file.name}' is not a text file and cannot be uploaded to the container.`);
+        return;
+      }
+      if (file.size > 1024 * 1024) {
+        alert(`'${file.name}' exceeds the 1 MB upload limit.`);
+        return;
+      }
       const reader = new FileReader();
       reader.onload = (e) => {
         const textContent = (e.target?.result as string) || "";
         const sizeFormatted = formatBytes(file.size);
-        
+        const dir = currentDir;
+
         setFiles((prev) => {
-          // Overwrite existing file with same name
-          const updated = prev.filter((f) => f.name.toLowerCase() !== file.name.toLowerCase());
+          // Overwrite existing file with same name in the same folder
+          const updated = prev.filter((f) => !(f.name.toLowerCase() === file.name.toLowerCase() && fileDir(f) === dir));
           const newBotFile: BotFile = {
             name: file.name,
+            path: dir,
             isFolder: false,
             size: sizeFormatted,
             updatedAt: "Just Now",
@@ -60,7 +95,9 @@ export default function FilesTab({ files, setFiles, onFileChange }: FilesTabProp
           };
           return [...updated, newBotFile];
         });
-        onFileChange();
+        // Only package.json edits invalidate installed node_modules;
+        // every file change clears the crash banner so the scanner re-evaluates.
+        onFileChange(file.name.toLowerCase() === "package.json");
       };
       reader.readAsText(file);
     });
@@ -89,7 +126,8 @@ export default function FilesTab({ files, setFiles, onFileChange }: FilesTabProp
     }
   };
 
-  // Filter folder files based on simulation (we'll keep it simple: simulate single root layer)
+  // Only show entries that live in the current directory
+  const visibleFiles = files.filter((f) => inDirectory(f, currentDir));
   const isAtRoot = currentPath.length === 2;
 
   const handleFolderClick = (folderName: string) => {
@@ -107,18 +145,44 @@ export default function FilesTab({ files, setFiles, onFileChange }: FilesTabProp
   };
 
   const saveEditor = () => {
-    if (!editingFile) return;
+    if (!editingFile) return;      const key = fileKey(editingFile);
     setFiles((prev) =>
       prev.map((f) =>
-        f.name === editingFile.name ? { ...f, content: editorContent, updatedAt: "Just Now" } : f
+        fileKey(f) === key
+          ? {
+              ...f,
+              content: editorContent,
+              size: formatBytes(new Blob([editorContent]).size),
+              updatedAt: "Just Now"
+            }
+          : f
       )
     );
     setEditingFile(null);
-    onFileChange(); // notify parent of file changes
+    onFileChange(editingFile.name.toLowerCase() === "package.json"); // notify parent of file changes
   };
 
   const deleteItem = (name: string) => {
-    setFiles((prev) => prev.filter((f) => f.name !== name));
+    const target = files.find((f) => f.name === name && fileDir(f) === currentDir);
+    if (!target) return;
+    const label = target.isFolder ? `folder '${name}' and ALL of its contents` : `file '${name}'`;
+    if (!window.confirm(`Are you sure you want to permanently delete the ${label}?`)) {
+      setActiveDropdown(null);
+      return;
+    }
+    if (target.isFolder) {
+      // Deleting a folder also removes EVERYTHING inside it (any nesting depth):
+      // keep entries that are not the folder itself and not located under it.
+      const folderPrefix = `${currentDir ? currentDir + "/" : ""}${name}/`;
+      setFiles((prev) => prev.filter((f) => {
+        const dir = fileDir(f);
+        if (dir === currentDir && f.name === name) return false; // the folder itself
+        return !dir.startsWith(folderPrefix); // anything nested inside it
+      }));
+    } else {
+      const key = fileKey(target);
+      setFiles((prev) => prev.filter((f) => fileKey(f) !== key));
+    }
     setActiveDropdown(null);
     onFileChange();
   };
@@ -126,25 +190,27 @@ export default function FilesTab({ files, setFiles, onFileChange }: FilesTabProp
   const createItem = () => {
     if (!newItemName.trim()) return;
     const isFolder = showCreateModal === "folder";
-    const exists = files.some((f) => f.name.toLowerCase() === newItemName.trim().toLowerCase());
+    const dir = currentDir;
+    const exists = files.some((f) => f.name.toLowerCase() === newItemName.trim().toLowerCase() && fileDir(f) === dir);
     
     if (exists) {
-      alert("An item with this name already exists in the folder!");
+      alert("An item with this name already exists in this folder!");
       return;
     }
 
     const newItem: BotFile = {
       name: newItemName.trim(),
+      path: dir,
       isFolder,
       size: isFolder ? "--" : "0 B",
       updatedAt: "Just Now",
-      content: isFolder ? "" : `// New file ${newItemName}\n`
+      content: isFolder ? "" : `// New file ${newItemName.trim()}\n`
     };
 
     setFiles((prev) => [...prev, newItem]);
     setShowCreateModal(null);
     setNewItemName("");
-    onFileChange();
+    onFileChange(false);
   };
 
   const toggleDropdown = (e: React.MouseEvent, name: string) => {
@@ -254,11 +320,11 @@ export default function FilesTab({ files, setFiles, onFileChange }: FilesTabProp
             </div>
           )}
 
-          {/* Map current files */}
-          {files.map((file) => (
+          {/* Map current files (only entries inside the active directory) */}
+          {visibleFiles.map((file) => (
             <div
-              key={file.name}
-              id={`file-row-${file.name}`}
+              key={fileKey(file)}
+              id={`file-row-${fileKey(file).replace(/[^a-zA-Z0-9]/g, "-")}`}
               className="grid grid-cols-12 items-center px-6 py-3.5 hover:bg-purple-950/10 transition-colors select-none"
             >
               {/* Name & Type Column */}
@@ -297,14 +363,15 @@ export default function FilesTab({ files, setFiles, onFileChange }: FilesTabProp
               {/* Interactive dropdown trigger */}
               <div className="col-span-4 sm:col-span-2 text-right relative">
                 <button
-                  id={`file-actions-toggle-${file.name}`}
-                  onClick={(e) => toggleDropdown(e, file.name)}
+                  id={`file-actions-toggle-${fileKey(file).replace(/[^a-zA-Z0-9]/g, "-")}`}
+                  aria-label={`Actions for ${file.name}`}
+                  onClick={(e) => toggleDropdown(e, fileKey(file))}
                   className="rounded-lg p-1.5 text-gray-500 hover:bg-purple-950/40 hover:text-purple-400 transition-colors"
                 >
                   <MoreVertical size={16} />
                 </button>
 
-                {activeDropdown === file.name && (
+                {activeDropdown === fileKey(file) && (
                   <>
                     <div className="fixed inset-0 z-10" onClick={() => setActiveDropdown(null)} />
                     <div id={`dropdown-menu-${file.name}`} className="absolute right-0 mt-1 w-36 rounded-lg border border-purple-500/10 bg-[#0e091d] p-1.5 text-left shadow-xl z-20">
@@ -333,7 +400,7 @@ export default function FilesTab({ files, setFiles, onFileChange }: FilesTabProp
             </div>
           ))}
 
-          {files.length === 0 && (
+          {visibleFiles.length === 0 && (
             <div className="py-12 text-center text-sm font-bold text-purple-400/50">
               No files or folders in this directory.
             </div>
@@ -395,7 +462,7 @@ export default function FilesTab({ files, setFiles, onFileChange }: FilesTabProp
                 <FileCode size={18} className="text-purple-400" />
                 <div>
                   <h4 className="text-sm font-black text-white font-mono">
-                    {editingFile.name}
+                    {fileDir(editingFile) ? `${fileDir(editingFile)}/` : ""}{editingFile.name}
                   </h4>
                   <span className="text-[9px] uppercase tracking-widest text-purple-400/60 font-bold">
                     Editing file in real-time container

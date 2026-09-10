@@ -4,5 +4,8 @@ dist/
 coverage/
 .DS_Store
 *.log
+logs/
+*.tsbuildinfo
 .env*
 !.env.example
+ecosystem.config.local.cjs

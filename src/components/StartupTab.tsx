@@ -1,10 +1,11 @@
 import React from "react";
-import { Play, Eye, EyeOff, Key, ShieldCheck, Cpu } from "lucide-react";
+import { Play, Eye, EyeOff, Key, ShieldCheck } from "lucide-react";
 import { StartupVariable } from "../types";
 
 interface StartupTabProps {
   variables: StartupVariable[];
-  setVariables: React.Dispatch<React.SetStateAction<StartupVariable[]>>;
+  /** Scoped updater for the active container's variables (function-updater style). */
+  setVariables: (updater: (vars: StartupVariable[]) => StartupVariable[]) => void;
   startupCommand: string;
   setStartupCommand: (cmd: string) => void;
   qwenKey: string;
@@ -64,10 +65,10 @@ export default function StartupTab({
           </span>
         </div>
         <p className="text-xs text-purple-300/80 leading-relaxed max-w-2xl">
-          Enter your custom **Qwen AI API Key** below. Pappy Panel proxies all requests through server-side environment gates, ensuring your key is never visible in the browser.
+          Optionally enter your personal **Qwen AI API Key** below. Requests are proxied through the Vortex Panel server so the key is never embedded in the client bundle.
           <br />
-          <span className="text-emerald-400 font-bold mt-1 inline-block">
-            * Note: If you leave this field empty, Pappy Panel will automatically fall back to Google Gemini 3.8-flash out of the box so you can test immediately!
+          <span className="text-amber-400 font-bold mt-1 inline-block">
+            * Storage: the key is kept in this browser tab's session storage (cleared when the tab closes). If you leave it empty, the server falls back to its own Gemini API key when one is configured.
           </span>
         </p>
 

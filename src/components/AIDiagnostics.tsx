@@ -4,13 +4,10 @@ import {
   Sparkles,
   Bot,
   AlertTriangle,
-  Play,
   CheckCircle,
-  HelpCircle,
   RefreshCw,
   FileCode,
   Check,
-  ChevronRight,
   ShieldCheck
 } from "lucide-react";
 import { BotFile, DiagnosticResult } from "../types";
@@ -20,7 +17,6 @@ interface AIDiagnosticsProps {
   files: BotFile[];
   errorText: string;
   qwenKey: string;
-  setFiles: React.Dispatch<React.SetStateAction<BotFile[]>>;
   onApplyFix: (fileName: string, fixedContent: string) => void;
   status: string;
 }
@@ -30,7 +26,6 @@ export default function AIDiagnostics({
   files,
   errorText,
   qwenKey,
-  setFiles,
   onApplyFix,
   status
 }: AIDiagnosticsProps) {
@@ -62,24 +57,35 @@ export default function AIDiagnostics({
           logs,
           files: filesPayload,
           errorText: errorText || "Container crashed or reported dependencies failure.",
-          qwenApiKey: qwenKey
+          qwenApiKey: qwenKey || undefined
         })
       });
+
+      // Guard against non-JSON responses (auth errors, rate limits, proxy pages)
+      const contentType = response.headers.get("content-type") || "";
+      if (!contentType.includes("application/json")) {
+        const text = await response.text();
+        setApiError(
+          `Diagnostics server returned a non-JSON response (HTTP ${response.status}). ` +
+          text.slice(0, 160)
+        );
+        return;
+      }
 
       const data = await response.json();
       if (response.ok && data.success) {
         setDiagnosticResult({
-          errorAnalysis: data.errorAnalysis,
-          brokenFileName: data.brokenFileName,
-          fixedContent: data.fixedContent,
-          explanation: data.explanation
+          errorAnalysis: String(data.errorAnalysis || ""),
+          brokenFileName: String(data.brokenFileName || ""),
+          fixedContent: String(data.fixedContent || ""),
+          explanation: String(data.explanation || "")
         });
         setEngineUsed(data.engine || "Vortex AI");
       } else {
-        setApiError(data.error || "Failed to parse AI diagnostics. Verify your internet configuration.");
+        setApiError(data.error || `Diagnostics failed (HTTP ${response.status}).`);
       }
     } catch (err: any) {
-      setApiError("Error connecting to diagnostics engine: " + err.message);
+      setApiError("Error connecting to diagnostics engine: " + (err?.message || "network error"));
     } finally {
       setLoading(false);
     }
